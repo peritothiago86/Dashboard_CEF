@@ -2619,8 +2619,8 @@ function parseTxt(txt, r){
   let nome = null;
   let tel = null;
   
-  // Expressões regulares baseadas no modelo exato da Caixa de "Nome do contato.:" e "Telefone contato:"
-  const matchNome = txt.match(/Nome do contato[\w\s.:-]*?([A-Za-zÀ-ÿ][^\n\r]+)/i);
+  // Captura nome na mesma linha OU na linha seguinte ao rótulo
+  const matchNome = txt.match(/Nome\s*do\s*contato\s*\.?\s*:?\s*:?\s*\r?\n?\s*([A-Za-zÀ-ÿ][^\n\r]+)/i);
   if(matchNome) {
     nome = matchNome[1].replace(/['"]/g, '').trim();
   } else {
@@ -2638,13 +2638,19 @@ function parseTxt(txt, r){
     }).join(' ');
   }
 
-  const matchTel = txt.match(/Telefone\s*(?:do\s*)?contato[\s.:-]+([^\n\r]+)/i);
+  // Tenta capturar telefone na mesma linha OU na linha seguinte ao rótulo
+  const matchTel = txt.match(/Telefone\s*(?:do\s*)?contato\s*[.:]?\s*:?\s*\r?\n?\s*([\d()\s\-+]+)/i);
   if(matchTel) {
     tel = matchTel[1].trim();
   } else {
-    // Retira o telefone da "Empresa" da jogada e tenta achar um celular
-    const mgen = txt.match(/Celular[\s.:-]+([^\n\r]+)/i);
-    if(mgen) tel = mgen[1].trim();
+    // Fallback: qualquer número após "Telefone" seguido de separador (mesma linha)
+    const mTelLinha = txt.match(/Telefone[^:\n]*:\s*([^\n\r]{5,})/i);
+    if(mTelLinha) tel = mTelLinha[1].trim();
+  }
+  // Segundo fallback: busca por "Celular" (evita pegar telefone da empresa)
+  if(!tel) {
+    const mCel = txt.match(/Celular[\s.:-]+([^\n\r]+)/i);
+    if(mCel) tel = mCel[1].trim();
   }
 
   let cep = null;
