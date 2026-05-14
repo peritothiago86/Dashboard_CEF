@@ -1943,29 +1943,26 @@ function renderCharts(D){
   const bMu={};D.forEach(r=>{const m=nMun(r.mun);if(m)bMu[m]=(bMu[m]||0)+1;});const mTop=Object.entries(bMu).sort((a,b)=>b[1]-a[1]).slice(0,12);
   const munPalette=['#00478E','#1a6ba0','#537082','#0a2a5e','#3a7a9e','#2a5a8e','#1a4a7e','#0e3a6e','#0a3a7e','#1a5a9e','#2a6aae','#0a2a6e'];
   mkC('cmun',{type:'bar',data:{labels:mTop.map(e=>e[0]),datasets:[{data:mTop.map(e=>e[1]),backgroundColor:mTop.map((_,i)=>munPalette[i%munPalette.length]),borderRadius:3}]},options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.parsed.x} OS`}}},scales:{x:{ticks:{stepSize:1}},y:{ticks:{font:{size:9,family:"'Inter',sans-serif"}}}}}});
-  // Faturamento por polo — agrupa pelos valores reais de r.polo (col F) sem depender de match exato com POLO_CORES
+  // Faturamento por polo — usa r.polo de col F (siglas RJ/VR/CAMPOS) e POLO_CORES para cores
   const poloSet=new Set();
-  D.forEach(r=>{
-    const munKey=nMun(r.mun);
-    const p=r.polo||(munKey&&MUN[munKey]?MUN[munKey].polo:'')||'';
-    if(p&&r.mes)poloSet.add(p);
-  });
+  D.forEach(r=>{if(r.polo&&r.mes)poloSet.add(r.polo);});
   const polosReal=[...poloSet].sort();
-  const poloPalette=['#00478E','#1a6b2a','#b85c15','#537082','#1a5a9e','#7e22ce','#a16207','#dc2626'];
   const mesSet=new Set();D.forEach(r=>{if(r.mes)mesSet.add(r.mes);});
   const mesL=[...mesSet].sort((a,b)=>MOS_ORD_IDX(a)-MOS_ORD_IDX(b));
-  const datasets=polosReal.map((polo,pi)=>({
-    label:polo,
-    data:mesL.map(mes=>Math.round(D.filter(r=>{
-      const munKey=nMun(r.mun);
-      const rPolo=r.polo||(munKey&&MUN[munKey]?MUN[munKey].polo:'')||'';
-      return r.mes===mes&&rPolo===polo&&(r.vt>0||r.vos>0);
-    }).reduce((s,r)=>s+(r.vt||r.vos||0),0))),
-    backgroundColor:poloPalette[pi%poloPalette.length],borderRadius:0,barPercentage:.75,categoryPercentage:.85
-  }));
+  const datasets=polosReal.map(polo=>{
+    const cor=POLO_CORES[polo]||'#537082';
+    return{
+      label:POLO_NOME[polo]||polo,
+      data:mesL.map(mes=>Math.round(D.filter(r=>r.mes===mes&&r.polo===polo).reduce((s,r)=>{
+        const val=r.vt||r.vos||(ATV_DYN[r.atv]?ATV_DYN[r.atv].v:(ATV[r.atv]?ATV[r.atv].v:0));
+        return s+val;
+      },0))),
+      backgroundColor:cor,borderRadius:0,barPercentage:.75,categoryPercentage:.85
+    };
+  });
   // Legenda dinâmica
   const legEl=document.getElementById('lpolo');
-  if(legEl)legEl.innerHTML=polosReal.map((p,i)=>`<span><span class="lsq" style="background:${poloPalette[i%poloPalette.length]}"></span>${POLO_NOME[p]||p}</span>`).join('');
+  if(legEl)legEl.innerHTML=polosReal.map(p=>`<span><span class="lsq" style="background:${POLO_CORES[p]||'#537082'}"></span>${POLO_NOME[p]||p}</span>`).join('');
   const altPolo=Math.max(280,mesL.length*40);document.getElementById('cpolo-wrap').style.height=altPolo+'px';
   const ctx=document.getElementById('cpolo').getContext('2d');if(CHS['cpolo'])CHS['cpolo'].destroy();
   CHS['cpolo']=new Chart(ctx,{type:'bar',data:{labels:mesL,datasets},options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${brl(c.raw)}`}}},scales:{x:{stacked:true,ticks:{color:'rgba(158,158,167,0.8)',font:{size:9},callback:v=>fmtK(v)},grid:{color:'rgba(255,255,255,.05)'}},y:{stacked:true,ticks:{color:'rgba(158,158,167,0.8)',font:{size:9,family:"'Inter',sans-serif"}},grid:{display:false}}}}});
@@ -2674,12 +2671,21 @@ async function loadDrive(r){
   if(!AUTH){warnD(ld,ct,pt,fl,wn,'Entre com Google para acessar os documentos.',np,pf);return;}
   try{
     const r1=await gapi.client.drive.files.list({q:`name='${pf}' and '${CFG.DID}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,fields:'files(id,name)',pageSize:5});
-    const fp=r1.result.files||[];if(!fp.length){warnD(ld,ct,pt,fl,wn,`Pasta "${pf}" não encontrada.`,np,pf);return;}
+    const fp=r1.result.files||[];
+    if(!fp.length){
+      warnD(ld,ct,pt,fl,wn,`Pasta "${pf}" não encontrada.`,np,pf);
+      buscarTxtDireto(r.item,r,null).then(c=>{if(c)showContato(c.nome,c.tel);});
+      return;
+    }
     const fid=fp[0].id;
     const r2=await gapi.client.drive.files.list({q:`name='${np}' and '${fid}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,fields:'files(id,name)',pageSize:5});
     let op=r2.result.files||[];
     if(!op.length){const r3=await gapi.client.drive.files.list({q:`name contains '${r.item}-' and '${fid}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,fields:'files(id,name)',pageSize:5});op=r3.result.files||[];}
-    if(!op.length){warnD(ld,ct,pt,fl,wn,`Pasta "${np}" não encontrada em "${pf}".`,np,pf);return;}
+    if(!op.length){
+      warnD(ld,ct,pt,fl,wn,`Pasta "${np}" não encontrada em "${pf}".`,np,pf);
+      buscarTxtDireto(r.item,r,null).then(c=>{if(c)showContato(c.nome,c.tel);});
+      return;
+    }
     await renderSubs(op[0].id,op[0].name,pf,ld,ct,pt,fl,wn,r);
   }catch(e){warnD(ld,ct,pt,fl,wn,`Erro: ${e.message}`,np,pf);}
 }
@@ -3905,28 +3911,39 @@ async function selecionarOsAgenda(r){
 
 async function buscarTxtDireto(item,r,inpT){
   try{
+    // Busca pasta da OS dentro da hierarquia do DID (in ancestors busca recursivo)
     const fd=await gapi.client.drive.files.list({
-      q:`name contains '${item}-' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+      q:`name contains '${item}-' and mimeType='application/vnd.google-apps.folder' and '${CFG.DID}' in ancestors and trashed=false`,
       fields:'files(id,name)',pageSize:5
     });
     const osDir=fd.result.files&&fd.result.files[0];
-    if(!osDir){inpT.value='';window.S_CONTATOS[item]={tel:null};return;}
+    if(!osDir){
+      console.warn(`[buscarTxtDireto] Pasta ${item}- não encontrada no DID`);
+      if(inpT)inpT.value='';
+      window.S_CONTATOS[item]={tel:null};
+      return null;
+    }
     const ft=await gapi.client.drive.files.list({
-      q:`'${osDir.id}' in parents and name contains '.txt' and trashed=false`,
+      q:`'${osDir.id}' in parents and (name contains '.txt' or name contains '.TXT') and trashed=false`,
       fields:'files(id,name)',pageSize:1
     });
-    if(!ft.result.files||!ft.result.files.length){inpT.value='';window.S_CONTATOS[item]={tel:null};return;}
+    if(!ft.result.files||!ft.result.files.length){
+      if(inpT)inpT.value='';
+      window.S_CONTATOS[item]={tel:null};
+      return null;
+    }
     const resp=await fetch(`https://www.googleapis.com/drive/v3/files/${ft.result.files[0].id}?alt=media`,{headers:{Authorization:`Bearer ${TOKEN}`}});
-    if(!resp.ok){inpT.value='';return;}
+    if(!resp.ok){if(inpT)inpT.value='';return null;}
     const txt=await resp.text();
     const c=parseTxt(txt,r);
     window.S_CONTATOS[item]=c;
-    inpT.value=(c.tel||'').replace(/\D/g,'');
-    updateAgendaPreview();
+    if(inpT){inpT.value=(c.tel||'').replace(/\D/g,'');updateAgendaPreview();}
+    return c;
   }catch(e){
     console.error('[buscarTxtDireto]',e);
-    if(inpT.value==='Localizando...')inpT.value='';
+    if(inpT&&inpT.value==='Localizando...')inpT.value='';
     window.S_CONTATOS[item]={tel:null};
+    return null;
   }
 }
 
