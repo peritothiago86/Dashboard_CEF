@@ -1282,7 +1282,8 @@ let CALENDAR_FILTERS = {};
 Object.keys(STCFG).forEach(st => {
   CALENDAR_FILTERS[st] = !['OS Concluída', 'OS Cancelada'].includes(st);
 });
-const POLO_CORES={'Campos Dos Goytacazes':'#1a6b2a','Rio De Janeiro':'#1a5a9e','Volta Redonda':'#b85c15'};
+const POLO_CORES={'CAMPOS':'#1a6b2a','RJ':'#1a5a9e','VR':'#b85c15'};
+const POLO_NOME={'CAMPOS':'Campos dos Goytacazes','RJ':'Rio de Janeiro','VR':'Volta Redonda'};
 const MES_MAP={'jan':'01','fev':'02','mar':'03','abr':'04','mai':'05','jun':'06','jul':'07','ago':'08','set':'09','out':'10','nov':'11','dez':'12'};
 const MES_ORD=['jan-25','fev-25','mar-25','abr-25','mai-25','jun-25','jul-25','ago-25','set-25','out-25','nov-25','dez-25','jan-26','fev-26','mar-26','abr-26','mai-26','jun-26'];
 const FILTER_FIELDS=[
@@ -1964,7 +1965,7 @@ function renderCharts(D){
   }));
   // Legenda dinâmica
   const legEl=document.getElementById('lpolo');
-  if(legEl)legEl.innerHTML=polosReal.map((p,i)=>`<span><span class="lsq" style="background:${poloPalette[i%poloPalette.length]}"></span>${p}</span>`).join('');
+  if(legEl)legEl.innerHTML=polosReal.map((p,i)=>`<span><span class="lsq" style="background:${poloPalette[i%poloPalette.length]}"></span>${POLO_NOME[p]||p}</span>`).join('');
   const altPolo=Math.max(280,mesL.length*40);document.getElementById('cpolo-wrap').style.height=altPolo+'px';
   const ctx=document.getElementById('cpolo').getContext('2d');if(CHS['cpolo'])CHS['cpolo'].destroy();
   CHS['cpolo']=new Chart(ctx,{type:'bar',data:{labels:mesL,datasets},options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${brl(c.raw)}`}}},scales:{x:{stacked:true,ticks:{color:'rgba(158,158,167,0.8)',font:{size:9},callback:v=>fmtK(v)},grid:{color:'rgba(255,255,255,.05)'}},y:{stacked:true,ticks:{color:'rgba(158,158,167,0.8)',font:{size:9,family:"'Inter',sans-serif"}},grid:{display:false}}}}});
@@ -3819,28 +3820,7 @@ async function selecionarOsAgenda(r){
     const pf=mes2pasta(r.mesDir||r.mes),np=nomePasta(r.item,r.atv,r.osp);
     console.log(`[Agenda Tel] Buscando: ${pf} / ${np}`);
     
-    // Fallback: se não tem mês, busca a pasta da OS diretamente em todo o Drive pai
-    if(!pf){
-      const fDirect=await gapi.client.drive.files.list({
-        q:`name contains '${r.item}-' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
-        fields:'files(id,name)',pageSize:3
-      });
-      const osDir=fDirect.result.files&&fDirect.result.files[0];
-      if(!osDir){inpT.value='';window.S_CONTATOS[r.item]={tel:null};return;}
-      const txDirect=await gapi.client.drive.files.list({
-        q:`'${osDir.id}' in parents and name contains '.txt' and trashed=false`,
-        fields:'files(id,name)',pageSize:1
-      });
-      if(!txDirect.result.files||!txDirect.result.files.length){inpT.value='';window.S_CONTATOS[r.item]={tel:null};return;}
-      const respD=await fetch(`https://www.googleapis.com/drive/v3/files/${txDirect.result.files[0].id}?alt=media`,{headers:{Authorization:`Bearer ${TOKEN}`}});
-      if(!respD.ok){inpT.value='';return;}
-      const txtD=await respD.text();
-      const cD=parseTxt(txtD,r);
-      window.S_CONTATOS[r.item]=cD;
-      inpT.value=(cD.tel||'').replace(/\D/g,'');
-      updateAgendaPreview();
-      return;
-    }
+    if(!pf) return buscarTxtDireto(r.item,r,inpT);
 
     // 1. Busca pasta do mês
     const r1=await gapi.client.drive.files.list({
@@ -3850,36 +3830,26 @@ async function selecionarOsAgenda(r){
     });
 
     if(!r1.result.files||!r1.result.files.length){
-      console.warn(`[Agenda Tel] Pasta mês não encontrada: ${pf}`);
-      inpT.value='';
-      window.S_CONTATOS[r.item]={tel:null};
-      return;
+      console.warn(`[Agenda Tel] Pasta mês não encontrada: ${pf} — tentando busca direta`);
+      return buscarTxtDireto(r.item,r,inpT);
     }
-    
+
     const mesFolderId=r1.result.files[0].id;
-    console.log(`[Agenda Tel] Pasta mês: ${r1.result.files[0].name} (${mesFolderId})`);
-    
+
     // 2. Busca pasta da OS
     let r2=await gapi.client.drive.files.list({
       q:`name='${np}' and '${mesFolderId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
-      fields:'files(id,name)',
-      pageSize:1
+      fields:'files(id,name)',pageSize:1
     });
-    
     if(!r2.result.files||!r2.result.files.length){
-      console.log('[Agenda Tel] Tentando busca parcial...');
       r2=await gapi.client.drive.files.list({
         q:`name contains '${r.item}-' and '${mesFolderId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
-        fields:'files(id,name)',
-        pageSize:1
+        fields:'files(id,name)',pageSize:1
       });
     }
-    
     if(!r2.result.files||!r2.result.files.length){
-      console.warn(`[Agenda Tel] Pasta OS não encontrada: ${np}`);
-      inpT.value='';
-      window.S_CONTATOS[r.item]={tel:null};
-      return;
+      console.warn(`[Agenda Tel] Pasta OS não encontrada — tentando busca direta`);
+      return buscarTxtDireto(r.item,r,inpT);
     }
     
     const osFolderId=r2.result.files[0].id;
@@ -3893,10 +3863,8 @@ async function selecionarOsAgenda(r){
     });
     
     if(!r4.result.files||!r4.result.files.length){
-      console.warn('[Agenda Tel] Arquivo .txt não encontrado na pasta da OS');
-      inpT.value='';
-      window.S_CONTATOS[r.item]={tel:null};
-      return;
+      console.warn('[Agenda Tel] .txt não encontrado na pasta — tentando busca direta');
+      return buscarTxtDireto(r.item,r,inpT);
     }
     
     console.log(`[Agenda Tel] Arquivo TXT: ${r4.result.files[0].name}`);
@@ -3932,6 +3900,33 @@ async function selecionarOsAgenda(r){
     console.error('[Agenda Tel] Erro:', e);
     if(inpT.value==='Localizando...') inpT.value='';
     window.S_CONTATOS[r.item]={tel:null};
+  }
+}
+
+async function buscarTxtDireto(item,r,inpT){
+  try{
+    const fd=await gapi.client.drive.files.list({
+      q:`name contains '${item}-' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+      fields:'files(id,name)',pageSize:5
+    });
+    const osDir=fd.result.files&&fd.result.files[0];
+    if(!osDir){inpT.value='';window.S_CONTATOS[item]={tel:null};return;}
+    const ft=await gapi.client.drive.files.list({
+      q:`'${osDir.id}' in parents and name contains '.txt' and trashed=false`,
+      fields:'files(id,name)',pageSize:1
+    });
+    if(!ft.result.files||!ft.result.files.length){inpT.value='';window.S_CONTATOS[item]={tel:null};return;}
+    const resp=await fetch(`https://www.googleapis.com/drive/v3/files/${ft.result.files[0].id}?alt=media`,{headers:{Authorization:`Bearer ${TOKEN}`}});
+    if(!resp.ok){inpT.value='';return;}
+    const txt=await resp.text();
+    const c=parseTxt(txt,r);
+    window.S_CONTATOS[item]=c;
+    inpT.value=(c.tel||'').replace(/\D/g,'');
+    updateAgendaPreview();
+  }catch(e){
+    console.error('[buscarTxtDireto]',e);
+    if(inpT.value==='Localizando...')inpT.value='';
+    window.S_CONTATOS[item]={tel:null};
   }
 }
 
