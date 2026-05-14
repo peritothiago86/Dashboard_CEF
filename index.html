@@ -2776,13 +2776,31 @@ async function buscarArquivoTxtNaPasta(folderId){
     pageSize:5
   });
   if(r1.result.files&&r1.result.files.length) return r1.result.files;
-  // Fallback: qualquer arquivo text/plain na pasta (caso o nome difira)
+  // Fallback 1: qualquer arquivo text/plain na pasta
   const r2=await gapi.client.drive.files.list({
     q:`'${folderId}' in parents and mimeType='text/plain' and trashed=false`,
     fields:'files(id,name,mimeType,webViewLink)',
     pageSize:10
   });
-  return r2.result.files||[];
+  if(r2.result.files&&r2.result.files.length) return r2.result.files;
+  // Fallback 2: qualquer arquivo cujo nome contenha .txt (cobre uploads sem mimeType correto)
+  const r3=await gapi.client.drive.files.list({
+    q:`'${folderId}' in parents and name contains '.txt' and trashed=false and mimeType!='application/vnd.google-apps.folder'`,
+    fields:'files(id,name,mimeType,webViewLink)',
+    pageSize:10
+  });
+  if(r3.result.files&&r3.result.files.length){
+    // Filtra apenas arquivos que terminam com .txt (evita falso-positivo tipo "fotos-txt-export.pdf")
+    const filtrados=r3.result.files.filter(f=>/\.txt$/i.test(f.name));
+    if(filtrados.length) return filtrados;
+  }
+  // Fallback 3: busca por conteúdo (fullText) — pega arquivos com "Telefone contato" mesmo sem extensão .txt
+  const r4=await gapi.client.drive.files.list({
+    q:`'${folderId}' in parents and fullText contains 'Telefone contato' and trashed=false and mimeType!='application/vnd.google-apps.folder'`,
+    fields:'files(id,name,mimeType,webViewLink)',
+    pageSize:5
+  });
+  return r4.result.files||[];
 }
 async function loadContatoTxt(folderId, ros){
   try{
@@ -2838,18 +2856,30 @@ async function criarPastasDrive(item,atv,osp,mes){
     
     // Salvar arquivo .txt diretamente na pasta da OS
     if(TXT_FILE_CONVOCACAO){
-      const convocacaoFolderId=osFolderId; // Arquivo fica na pasta raiz da OS
-      const nomeArquivo=osp+'.txt'; // Nome: número da OS sem pontos e barras
+      const metadata = {
+        name: 'convocacao.txt',
+        parents: [osFolderId],
+        mimeType: 'text/plain'
+      };
       const initRes = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable', {
         method: 'POST',
-        headers: { 'Authorization': 'Bearer ' + TOKEN, 'Content-Type': 'application/json' },
+        headers: {
+          'Authorization': 'Bearer ' + TOKEN,
+          'Content-Type': 'application/json; charset=UTF-8',
+          'X-Upload-Content-Type': 'text/plain; charset=utf-8'
+        },
         body: JSON.stringify(metadata)
       });
       if(initRes.ok) {
-        await fetch(initRes.headers.get('Location'), {
+        const uploadUrl = initRes.headers.get('Location');
+        const putRes = await fetch(uploadUrl, {
           method: 'PUT',
+          headers: { 'Content-Type': 'text/plain; charset=utf-8' },
           body: TXT_FILE_CONVOCACAO
         });
+        if(!putRes.ok) console.warn('[criarPastasDrive] PUT do .txt falhou:', putRes.status);
+      } else {
+        console.warn('[criarPastasDrive] Init resumable .txt falhou:', initRes.status);
       }
       TXT_FILE_CONVOCACAO=null; // Limpa após salvar
     }
