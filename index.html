@@ -946,23 +946,23 @@ body.light-mode .wpp-msg-body{background:#e5ddd5;color:#111;border:1px solid rgb
       <div class="df full">
         <div class="dl">Endereço</div>
         <div class="dv" id="d-end"></div>
-        <input class="dv-input" id="e-end" type="text" data-field="end" data-col="I">
+        <input class="dv-input" id="e-end" type="text" data-field="end" data-col="J">
       </div>
       <div class="df">
         <div class="dl">Bairro</div>
         <div class="dv" id="d-bairro"></div>
-        <input class="dv-input" id="e-bairro" type="text" data-field="bairro" data-col="G">
+        <input class="dv-input" id="e-bairro" type="text" data-field="bairro" data-col="H">
       </div>
       <div class="df">
         <div class="dl">Município</div>
         <div class="dv" id="d-mun"></div>
-        <input class="dv-input" id="e-mun" type="text" data-field="mun" data-col="F" list="ml-drawer" onclick="fp(this)" onblur="fpBlur(this)">
+        <input class="dv-input" id="e-mun" type="text" data-field="mun" data-col="G" list="ml-drawer" onclick="fp(this)" onblur="fpBlur(this)">
         <datalist id="ml-drawer"></datalist>
       </div>
       <div class="df">
         <div class="dl">CEP</div>
         <div class="dv" id="d-cep"></div>
-        <input class="dv-input" id="e-cep" type="text" data-field="cep" data-col="AA">
+        <input class="dv-input" id="e-cep" type="text" data-field="cep" data-col="AE">
       </div>
       <div class="df">
         <div class="dl">Polo</div>
@@ -974,7 +974,7 @@ body.light-mode .wpp-msg-body{background:#e5ddd5;color:#111;border:1px solid rgb
       <div class="df">
         <div class="dl">Tipologia</div>
         <div class="dv" id="d-tip"></div>
-        <select class="dv-input" id="e-tip" data-field="tip" data-col="H">
+        <select class="dv-input" id="e-tip" data-field="tip" data-col="I">
           <option>Apartamento</option><option>Casa</option><option>Casa comercial</option>
           <option>Obra Residencial</option><option>Terreno</option><option>Sala comercial</option>
           <option>Loja</option><option>Gleba</option>
@@ -983,12 +983,12 @@ body.light-mode .wpp-msg-body{background:#e5ddd5;color:#111;border:1px solid rgb
       <div class="df">
         <div class="dl">Área</div>
         <div class="dv" id="d-area"></div>
-        <input class="dv-input" id="e-area" type="text" data-field="area" data-col="J">
+        <input class="dv-input" id="e-area" type="text" data-field="area" data-col="K">
       </div>
       <div class="df">
         <div class="dl">Valor avaliado</div>
         <div class="dv" id="d-vaval"></div>
-        <input class="dv-input" id="e-vaval" type="number" step="0.01" data-field="va" data-col="V">
+        <input class="dv-input" id="e-vaval" type="number" step="0.01" data-field="va" data-col="Z">
       </div>
       <div class="df">
         <div class="dl">R$/m²</div>
@@ -999,17 +999,17 @@ body.light-mode .wpp-msg-body{background:#e5ddd5;color:#111;border:1px solid rgb
       <div class="df">
         <div class="dl">Entrada SIOPI</div>
         <div class="dv" id="d-siopi"></div>
-        <input class="dv-input" id="e-siopi" type="text" data-field="siopi" data-col="M">
+        <input class="dv-input" id="e-siopi" type="text" data-field="siopi" data-col="N">
       </div>
       <div class="df">
         <div class="dl">Entrega</div>
         <div class="dv" id="d-ent"></div>
-        <input class="dv-input" id="e-ent" type="text" data-field="ent" data-col="O" readonly>
+        <input class="dv-input" id="e-ent" type="text" data-field="ent" data-col="P" readonly>
       </div>
       <div class="df">
         <div class="dl">Mês faturamento</div>
         <div class="dv" id="d-mes"></div>
-        <input class="dv-input" id="e-mes" type="text" data-field="mes" data-col="K">
+        <input class="dv-input" id="e-mes" type="text" data-field="mes" data-col="L">
       </div>
       <div class="df">
         <div class="dl">Revisão</div>
@@ -3565,8 +3565,11 @@ async function updSt(ns){
       resource:{
         valueInputOption:'USER_ENTERED',
         data:[
-          {range:`${CFG.SHT}!R${COS.ri}:U${COS.ri}`, values:[[vOSFmt, vDeslocFmt, vTotalFmt, ns]]},
-          {range:`${CFG.SHT}!W${COS.ri}:X${COS.ri}`, values:[['', 'FALSE']]}
+          {range:`${CFG.SHT}!U${COS.ri}`, values:[[vOSFmt]]},
+          {range:`${CFG.SHT}!W${COS.ri}`, values:[[vDeslocFmt]]},
+          {range:`${CFG.SHT}!X${COS.ri}`, values:[[vTotalFmt]]},
+          {range:`${CFG.SHT}!Y${COS.ri}`, values:[[ns]]},
+          {range:`${CFG.SHT}!AA${COS.ri}:AB${COS.ri}`, values:[['', 'FALSE']]}
         ]
       }
     });
@@ -4180,3 +4183,5 @@ async function batchUpdateCeps() {
 </div>
 </body>
 </html>-
+
+
