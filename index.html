@@ -1010,7 +1010,7 @@ body.light-mode .wpp-msg-body{background:#e5ddd5;color:#111;border:1px solid rgb
       <div class="df">
         <div class="dl">Mês faturamento</div>
         <div class="dv" id="d-mes"></div>
-        <input class="dv-input" id="e-mes" type="text" data-field="mes" data-col="L">
+        <input class="dv-input" id="e-mes" type="text" data-field="mes" data-col="M">
       </div>
       <div class="df">
         <div class="dl">Revisão</div>
@@ -1371,7 +1371,24 @@ const fmtK=v=>{if(v>=1e6)return'R$ '+(v/1e6).toFixed(2).replace('.',',')+'M';if(
 const pBRL=v=>{if(!v)return 0;const n=String(v).replace(/R\$\s*/,'').replace(/\./g,'').replace(',','.');const f=parseFloat(n);return isNaN(f)?0:f;};
 const MOS_ORD_IDX=m=>MES_ORD.indexOf(m)<0?99:MES_ORD.indexOf(m);
 function getMesAtual(){const now=new Date();const m=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];return m[now.getMonth()]+'-'+String(now.getFullYear()).slice(2);}
-function normalizaMes(m){if(!m)return'';const s=String(m).trim().replace('.','');if(/^\d{4}-\d{2}$/.test(s)){const[ano,mes]=s.split('-');const meses=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];const idx=parseInt(mes,10)-1;if(idx>=0&&idx<12)return meses[idx]+'-'+ano.slice(2);}if(/^[a-z]{3}-\d{4}$/i.test(s)){const[mes,ano]=s.split('-');return mes.toLowerCase()+'-'+ano.slice(2);}return s;}
+function normalizaMes(m){
+  if(!m)return'';
+  const MESES=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+  const s=String(m).trim().replace(/\.\s*$/,'');
+  // YYYY-MM ou YYYY/MM
+  let t=s.match(/^(\d{4})[-\/](\d{1,2})$/);
+  if(t){const idx=parseInt(t[2],10)-1;if(idx>=0&&idx<12)return MESES[idx]+'-'+t[1].slice(2);}
+  // MM/YYYY ou MM-YYYY (com mês de 1-2 dígitos no início)
+  t=s.match(/^(\d{1,2})[-\/](\d{4})$/);
+  if(t){const idx=parseInt(t[1],10)-1;if(idx>=0&&idx<12)return MESES[idx]+'-'+t[2].slice(2);}
+  // mon-YY já normalizado
+  t=s.match(/^([a-z]{3})-(\d{2})$/i);
+  if(t)return t[1].toLowerCase()+'-'+t[2];
+  // mon-YYYY
+  t=s.match(/^([a-z]{3})-(\d{4})$/i);
+  if(t)return t[1].toLowerCase()+'-'+t[2].slice(2);
+  return s;
+}
 function converterMesParaSalvar(m){if(!m)return'';const s=String(m).trim();if(/^\d{4}-\d{2}$/.test(s)){const[ano,mes]=s.split('-');const meses=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];const idx=parseInt(mes,10)-1;if(idx>=0&&idx<12)return meses[idx]+'-'+ano.slice(2);}return s;}
 function normalizaDataEntrega(d){if(!d)return'';const s=String(d).trim();if(/^\d{4}-\d{2}-\d{2}$/.test(s)){const[ano,mes,dia]=s.split('-');return`${dia}/${mes}/${ano}`;}if(/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(s)){return s;}return s;}
 function parseRow(r,i){return{ri:i+2,item:P(r[0]),os:P(r[1]),osp:P(r[1]),aceita:B(r[2]),atv:P(r[3]),tv:P(r[4]),polo:P(r[5]),mun:P(r[6]),bairro:P(r[7]),tip:P(r[8]),end:P(r[9]),area:P(r[10]),mesDir:normalizaMes(P(r[11])),mes:normalizaMes(P(r[12])),siopi:normalizaDataEntrega(P(r[13])),pept:B(r[14]),ent:normalizaDataEntrega(P(r[15])),vis:B(r[16]),lau:B(r[17]),fich:B(r[21]),vos:pBRL(r[20]),vd:pBRL(r[22]),vt:pBRL(r[23]),st:P(r[24]),va:pBRL(r[25]),rsm:P(r[26]),rev:B(r[27]),abr:P(r[28]),prz:P(r[29]),cep:P(r[30]),ord:P(r[0])};}
@@ -2050,7 +2067,8 @@ async function saveDrawerEdits(){
   inputs.forEach(inp=>{
     const col=inp.dataset.col;if(!col)return;
     let val=inp.value.trim();
-    if(inp.dataset.field=='va'){val=val==='' ? '' : (`R$ ${parseFloat(val||0).toFixed(2).replace('.',',')}`);updates.push({range:`${CFG.SHT}!${col}${COS.ri}`,values:[[val]]});return;}
+    if(inp.dataset.field=='mes'){val=normalizaMes(val)||val;}
+    if(inp.dataset.field=='va'){val=val===''?'':(`R$ ${parseFloat(val||0).toFixed(2).replace('.',',')}`);updates.push({range:`${CFG.SHT}!${col}${COS.ri}`,values:[[val]]});return;}
     if(val)updates.push({range:`${CFG.SHT}!${col}${COS.ri}`,values:[[val]]});
   });
 
@@ -2708,16 +2726,9 @@ async function renderSubs(oid,onm,pf,ld,ct,pt,fl,wn,ros){
   }catch(e){warnD(ld,ct,pt,fl,wn,`Erro: ${e.message}`,onm,pf);}
 }
 async function lerArquivoDrive(fileId){
-  // Usa gapi.client que gerencia o token internamente — mais confiável que fetch manual
-  try{
-    const r=await gapi.client.drive.files.get({fileId,alt:'media'});
-    return r.body||'';
-  }catch(e){
-    // Fallback via fetch com Bearer token
-    const resp=await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,{headers:{Authorization:`Bearer ${TOKEN}`}});
-    if(!resp.ok)throw new Error(`HTTP ${resp.status}`);
-    return resp.text();
-  }
+  const resp=await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,{headers:{Authorization:`Bearer ${TOKEN}`}});
+  if(!resp.ok)throw new Error(`Erro ao ler arquivo Drive: HTTP ${resp.status}`);
+  return resp.text();
 }
 async function buscarArquivoTxtNaPasta(folderId){
   const res=await gapi.client.drive.files.list({
