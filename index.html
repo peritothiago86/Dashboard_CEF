@@ -2707,25 +2707,40 @@ async function renderSubs(oid,onm,pf,ld,ct,pt,fl,wn,ros){
     fl.appendChild(aa);ld.style.display='none';ct.style.display='block';
   }catch(e){warnD(ld,ct,pt,fl,wn,`Erro: ${e.message}`,onm,pf);}
 }
+async function lerArquivoDrive(fileId){
+  // Usa gapi.client que gerencia o token internamente — mais confiável que fetch manual
+  try{
+    const r=await gapi.client.drive.files.get({fileId,alt:'media'});
+    return r.body||'';
+  }catch(e){
+    // Fallback via fetch com Bearer token
+    const resp=await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,{headers:{Authorization:`Bearer ${TOKEN}`}});
+    if(!resp.ok)throw new Error(`HTTP ${resp.status}`);
+    return resp.text();
+  }
+}
+async function buscarArquivoTxtNaPasta(folderId){
+  const res=await gapi.client.drive.files.list({
+    q:`'${folderId}' in parents and (mimeType='text/plain' or name contains '.txt' or name contains '.TXT') and mimeType!='application/vnd.google-apps.folder' and trashed=false`,
+    fields:'files(id,name,mimeType,webViewLink)',
+    pageSize:10
+  });
+  return res.result.files||[];
+}
 async function loadContatoTxt(folderId, ros){
   try{
-    const res=await gapi.client.drive.files.list({q:`'${folderId}' in parents and (name contains '.txt' or name contains '.TXT') and trashed=false`,fields:'files(id,name)',pageSize:5});
-    const txts=res.result.files||[];if(!txts.length)return;
-    const resp=await fetch(`https://www.googleapis.com/drive/v3/files/${txts[0].id}?alt=media`,{headers:{Authorization:`Bearer ${TOKEN}`}});
-    if(!resp.ok)return;const txt=await resp.text();
-    const osObj = ALL.find(a=>a.item===ros?.item) || ros;
-    const{nome,tel,cep}=parseTxt(txt, osObj);
+    const txts=await buscarArquivoTxtNaPasta(folderId);
+    if(!txts.length)return;
+    const txt=await lerArquivoDrive(txts[0].id);
+    const osObj=ALL.find(a=>a.item===ros?.item)||ros;
+    const{nome,tel,cep}=parseTxt(txt,osObj);
     showContato(nome,tel);
-    if(cep){
-      setDV('d-cep',cep);
-      setEI('e-cep',cep);
-    }
+    if(cep){setDV('d-cep',cep);setEI('e-cep',cep);}
   }catch(e){console.warn('Contato TXT:',e);}
 }
 async function loadContatoTxtDireto(osFolderId, ros, fl){
   try{
-    const res=await gapi.client.drive.files.list({q:`'${osFolderId}' in parents and (name contains '.txt' or name contains '.TXT') and trashed=false`,fields:'files(id,name,webViewLink)',pageSize:10});
-    const txts=res.result.files||[];
+    const txts=await buscarArquivoTxtNaPasta(osFolderId);
     // Insere txts no topo da lista de pastas (fl)
     if(fl&&txts.length){
       txts.forEach(f=>{
@@ -2733,19 +2748,15 @@ async function loadContatoTxtDireto(osFolderId, ros, fl){
         div.style.cursor='pointer';
         div.innerHTML=`<div class="ficon" style="background:rgba(83,112,130,0.15);border:1px solid rgba(83,112,130,0.3)">📝</div><div style="flex:1"><div style="font-size:12px;font-weight:500">${f.name}</div><div style="font-size:10px;color:var(--text-muted)">Arquivo de convocação</div></div><div style="font-size:10px;color:var(--accent)">↗</div>`;
         div.onclick=()=>openFilePreviewDireto(f);
-        fl.insertBefore(div, fl.firstChild);
+        fl.insertBefore(div,fl.firstChild);
       });
     }
     if(!txts.length)return;
-    const resp=await fetch(`https://www.googleapis.com/drive/v3/files/${txts[0].id}?alt=media`,{headers:{Authorization:`Bearer ${TOKEN}`}});
-    if(!resp.ok)return;const txt=await resp.text();
+    const txt=await lerArquivoDrive(txts[0].id);
     const osObj=ALL.find(a=>a.item===ros?.item)||ros;
     const{nome,tel,cep}=parseTxt(txt,osObj);
     showContato(nome,tel);
-    if(cep){
-      setDV('d-cep',cep);
-      setEI('e-cep',cep);
-    }
+    if(cep){setDV('d-cep',cep);setEI('e-cep',cep);}
   }catch(e){console.warn('Contato TXT direto:',e);}
 }
 function warnD(ld,ct,pt,fl,wn,msg,nm,pf){ld.style.display='none';pt.textContent=`Drive / ${pf} / ${nm}`;fl.innerHTML='';wn.style.display='block';wn.textContent=msg;ct.style.display='block';}
@@ -3861,36 +3872,19 @@ async function selecionarOsAgenda(r){
     const osFolderId=r2.result.files[0].id;
     console.log(`[Agenda Tel] Pasta OS: ${r2.result.files[0].name} (${osFolderId})`);
     
-    // 3. Busca arquivo .txt direto na pasta da OS (por nome, não por mimetype)
-    const r4=await gapi.client.drive.files.list({
-      q:`'${osFolderId}' in parents and name contains '.txt' and trashed=false`,
-      fields:'files(id,name)',
-      pageSize:1
-    });
-    
-    if(!r4.result.files||!r4.result.files.length){
+    // 3. Busca arquivo .txt na pasta da OS (por mimeType ou nome)
+    const txtsOS=await buscarArquivoTxtNaPasta(osFolderId);
+    if(!txtsOS.length){
       console.warn('[Agenda Tel] .txt não encontrado na pasta — tentando busca direta');
       return buscarTxtDireto(r.item,r,inpT);
     }
-    
-    console.log(`[Agenda Tel] Arquivo TXT: ${r4.result.files[0].name}`);
-    
-    // 6. Lê o arquivo
-    const resp=await fetch(`https://www.googleapis.com/drive/v3/files/${r4.result.files[0].id}?alt=media`,{
-      headers:{Authorization:`Bearer ${TOKEN}`}
-    });
-    
-    if(!resp.ok){
-      console.error(`[Agenda Tel] Erro ao ler arquivo: ${resp.status}`);
-      inpT.value='';
-      window.S_CONTATOS[r.item]={tel:null};
-      return;
-    }
-    
-    const txt=await resp.text();
+    console.log(`[Agenda Tel] Arquivo TXT: ${txtsOS[0].name}`);
+
+    // Lê o arquivo via gapi (token gerenciado internamente)
+    const txt=await lerArquivoDrive(txtsOS[0].id);
     console.log(`[Agenda Tel] Arquivo lido (${txt.length} chars)`);
-    
-    // 7. Parse do telefone
+
+    // Parse do telefone
     const c=parseTxt(txt, r);
     console.log(`[Agenda Tel] Contato extraído:`, c);
     
@@ -3911,31 +3905,32 @@ async function selecionarOsAgenda(r){
 
 async function buscarTxtDireto(item,r,inpT){
   try{
-    // Busca pasta da OS dentro da hierarquia do DID (in ancestors busca recursivo)
+    // Busca pasta da OS pelo número do item — pesquisa simples sem ancestors
     const fd=await gapi.client.drive.files.list({
-      q:`name contains '${item}-' and mimeType='application/vnd.google-apps.folder' and '${CFG.DID}' in ancestors and trashed=false`,
-      fields:'files(id,name)',pageSize:5
+      q:`name contains '${item}-' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+      fields:'files(id,name)',pageSize:10
     });
-    const osDir=fd.result.files&&fd.result.files[0];
+    const pastas=fd.result.files||[];
+    // Prefere a pasta cujo nome começa exatamente com item-
+    const osDir=pastas.find(p=>p.name.startsWith(`${item}-`))||pastas[0];
     if(!osDir){
-      console.warn(`[buscarTxtDireto] Pasta ${item}- não encontrada no DID`);
+      console.warn(`[buscarTxtDireto] Pasta da OS ${item} não encontrada`);
       if(inpT)inpT.value='';
       window.S_CONTATOS[item]={tel:null};
       return null;
     }
-    const ft=await gapi.client.drive.files.list({
-      q:`'${osDir.id}' in parents and (name contains '.txt' or name contains '.TXT') and trashed=false`,
-      fields:'files(id,name)',pageSize:1
-    });
-    if(!ft.result.files||!ft.result.files.length){
+    console.log(`[buscarTxtDireto] Pasta encontrada: ${osDir.name}`);
+    const txts=await buscarArquivoTxtNaPasta(osDir.id);
+    if(!txts.length){
+      console.warn(`[buscarTxtDireto] .txt não encontrado em ${osDir.name}`);
       if(inpT)inpT.value='';
       window.S_CONTATOS[item]={tel:null};
       return null;
     }
-    const resp=await fetch(`https://www.googleapis.com/drive/v3/files/${ft.result.files[0].id}?alt=media`,{headers:{Authorization:`Bearer ${TOKEN}`}});
-    if(!resp.ok){if(inpT)inpT.value='';return null;}
-    const txt=await resp.text();
+    console.log(`[buscarTxtDireto] Arquivo: ${txts[0].name}`);
+    const txt=await lerArquivoDrive(txts[0].id);
     const c=parseTxt(txt,r);
+    console.log(`[buscarTxtDireto] Contato:`,c);
     window.S_CONTATOS[item]=c;
     if(inpT){inpT.value=(c.tel||'').replace(/\D/g,'');updateAgendaPreview();}
     return c;
