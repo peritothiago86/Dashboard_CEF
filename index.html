@@ -2769,23 +2769,20 @@ async function lerArquivoDrive(fileId){
   return resp.text();
 }
 async function buscarArquivoTxtNaPasta(folderId){
-  // Query 1: por mimeType text/plain (mais confiável, independe do nome)
+  // Query 1: nome exato padrão (todos os arquivos renomeados para convocacao.txt)
   const r1=await gapi.client.drive.files.list({
-    q:`'${folderId}' in parents and mimeType='text/plain' and mimeType!='application/vnd.google-apps.folder' and trashed=false`,
+    q:`'${folderId}' in parents and name='convocacao.txt' and trashed=false`,
+    fields:'files(id,name,mimeType,webViewLink)',
+    pageSize:5
+  });
+  if(r1.result.files&&r1.result.files.length) return r1.result.files;
+  // Fallback: qualquer arquivo text/plain na pasta (caso o nome difira)
+  const r2=await gapi.client.drive.files.list({
+    q:`'${folderId}' in parents and mimeType='text/plain' and trashed=false`,
     fields:'files(id,name,mimeType,webViewLink)',
     pageSize:10
   });
-  if(r1.result.files&&r1.result.files.length) return r1.result.files;
-  // Query 2: fallback por todos os arquivos na pasta e filtra por extensão .txt/.TXT no nome
-  const r2=await gapi.client.drive.files.list({
-    q:`'${folderId}' in parents and mimeType!='application/vnd.google-apps.folder' and trashed=false`,
-    fields:'files(id,name,mimeType,webViewLink)',
-    pageSize:30
-  });
-  const todos=r2.result.files||[];
-  // Filtra por extensão .txt (case-insensitive) no nome
-  const txts=todos.filter(f=>f.name&&f.name.toLowerCase().endsWith('.txt'));
-  return txts;
+  return r2.result.files||[];
 }
 async function loadContatoTxt(folderId, ros){
   try{
