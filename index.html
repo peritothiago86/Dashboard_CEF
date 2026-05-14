@@ -293,6 +293,7 @@ body.light-mode .cbtn{background:rgba(0,0,0,0.06)}
 .dv-input[readonly]{background:rgba(0,0,0,.15);color:var(--text-muted);cursor:not-allowed}
 .edit-mode .dv{display:none}
 .edit-mode .dv-input{display:block}
+.edit-mode #d-vos,.edit-mode #d-vd,.edit-mode #d-vt{display:block;color:var(--text-primary)}
 
 .flist{display:flex;flex-direction:column;gap:5px}
 .fi{display:flex;align-items:center;gap:10px;padding:8px 12px;border:1px solid var(--mica-border);border-radius:8px;
@@ -1575,11 +1576,33 @@ function setAuthUI(ok){
 // ═══════════════════════════════════════════════════════════
 //  DATA LOADING
 // ═══════════════════════════════════════════════════════════
+let ATV_DYN={};
+let MUN_DESL_DYN={};
+async function loadPlanilha1(){
+  try{
+    const r=await gapi.client.sheets.spreadsheets.values.get({spreadsheetId:CFG.SID,range:`Planilha 1!E1:M300`});
+    const rows=r.result.values||[];
+    ATV_DYN={};MUN_DESL_DYN={};
+    rows.forEach(row=>{
+      // Município (col E=0) e deslocamento (col G=2)
+      const mun=(row[0]||'').trim();
+      const vDesl=parseFloat((row[2]||'').toString().replace(/[^\d,]/g,'').replace(',','.'))||0;
+      if(mun)MUN_DESL_DYN[mun]=vDesl;
+      // Atividade (col J=5), valor (col K=6), prazo (col L=7), prazo PEPT (col M=8)
+      const atv=(row[5]||'').trim();
+      const vAtv=parseFloat((row[6]||'').toString().replace(/[^\d,]/g,'').replace(',','.'))||0;
+      const prazo=parseInt(row[7])||null;
+      const prazoPept=parseInt(row[8])||null;
+      if(atv)ATV_DYN[atv]={v:vAtv,p:prazo,pp:prazoPept};
+    });
+  }catch(e){console.warn('loadPlanilha1:',e);}
+}
 async function loadData(){
   try{
     const r=await gapi.client.sheets.spreadsheets.values.get({spreadsheetId:CFG.SID,range:`${CFG.SHT}!A2:AZ`});
     const rows=r.result.values||[];
     ALL=rows.map((r,i)=>({r,i})).filter(x=>x.r.length>0&&x.r[0]).map(x=>parseRow(x.r,x.i));
+    loadPlanilha1();
     window.danthiART={
       getOS(mes){
         return ALL.filter(r=>r.st==='OS Concluída'&&r.mes===mes).map(r=>({
@@ -1980,12 +2003,15 @@ function recalcDrawerVOS(){
   const atv=(atvEl&&atvEl.value.trim())||COS.atv;
   const munRaw=(munEl&&munEl.value.trim())||nMun(COS.mun);
   const isEsp=espEl&&espEl.value==='1';
-  const cfgAtv=ATV[atv];
+  // ATV: Planilha 1 primeiro, fallback hardcoded
+  const cfgAtv=ATV_DYN[atv]||ATV[atv];
   const vOS=cfgAtv?cfgAtv.v:(COS.vos||0);
+  // Deslocamento: Planilha 1 primeiro, fallback MUN hardcoded
   const munKey=findMunKey(munRaw)||nMun(COS.mun);
   let vDesloc=0;
-  if(atv!=='G402'&&atv!=='G402A'&&munKey&&MUN[munKey]){
-    vDesloc=isEsp?Math.round(MUN[munKey].v*0.21*100)/100:MUN[munKey].v;
+  if(atv!=='G402'&&atv!=='G402A'&&munKey){
+    const vBase=MUN_DESL_DYN[munKey]||(MUN[munKey]?MUN[munKey].v:0);
+    vDesloc=isEsp?Math.round(vBase*0.21*100)/100:vBase;
   }
   document.getElementById('d-vos').textContent=brl(vOS);
   document.getElementById('d-vd').textContent=brl(vDesloc);
