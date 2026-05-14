@@ -1465,6 +1465,7 @@ function toggleDark(){
 //  GOOGLE API INIT
 // ═══════════════════════════════════════════════════════════
 window.onload=()=>{
+  carregarConfig();
   const selAtv=document.getElementById('na');selAtv.innerHTML='<option value="">Selecione...</option>';
   Object.keys(ATV).sort().forEach(k=>{const o=document.createElement('option');o.value=k;o.textContent=k;selAtv.appendChild(o);});
   const eAtv=document.getElementById('e-atv');eAtv.innerHTML='<option value="">—</option>';
@@ -1941,11 +1942,30 @@ function renderCharts(D){
   const bMu={};D.forEach(r=>{const m=nMun(r.mun);if(m)bMu[m]=(bMu[m]||0)+1;});const mTop=Object.entries(bMu).sort((a,b)=>b[1]-a[1]).slice(0,12);
   const munPalette=['#00478E','#1a6ba0','#537082','#0a2a5e','#3a7a9e','#2a5a8e','#1a4a7e','#0e3a6e','#0a3a7e','#1a5a9e','#2a6aae','#0a2a6e'];
   mkC('cmun',{type:'bar',data:{labels:mTop.map(e=>e[0]),datasets:[{data:mTop.map(e=>e[1]),backgroundColor:mTop.map((_,i)=>munPalette[i%munPalette.length]),borderRadius:3}]},options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.parsed.x} OS`}}},scales:{x:{ticks:{stepSize:1}},y:{ticks:{font:{size:9,family:"'Inter',sans-serif"}}}}}});
-  // Faturamento por polo
-  const polos=Object.keys(POLO_CORES),cores=Object.values(POLO_CORES);
-  const mesSet=new Set();D.forEach(r=>{if(r.mes)mesSet.add(r.mes);});const mesL=[...mesSet].sort((a,b)=>MOS_ORD_IDX(a)-MOS_ORD_IDX(b));
-  const datasets=polos.map((polo,pi)=>({label:polo,data:mesL.map(mes=>Math.round(D.filter(r=>{const munKey=nMun(r.mun);const rPolo=r.polo||(munKey&&MUN[munKey]?MUN[munKey].polo:'')||'';return r.mes===mes&&rPolo.toLowerCase()===polo.toLowerCase()&&(r.vt>0||r.vos>0);}).reduce((s,r)=>s+(r.vt||r.vos||0),0))),backgroundColor:cores[pi],borderRadius:0,barPercentage:.75,categoryPercentage:.85}));
-  const altPolo=Math.max(280,mesL.length*30);document.getElementById('cpolo-wrap').style.height=altPolo+'px';
+  // Faturamento por polo — agrupa pelos valores reais de r.polo (col F) sem depender de match exato com POLO_CORES
+  const poloSet=new Set();
+  D.forEach(r=>{
+    const munKey=nMun(r.mun);
+    const p=r.polo||(munKey&&MUN[munKey]?MUN[munKey].polo:'')||'';
+    if(p&&r.mes)poloSet.add(p);
+  });
+  const polosReal=[...poloSet].sort();
+  const poloPalette=['#00478E','#1a6b2a','#b85c15','#537082','#1a5a9e','#7e22ce','#a16207','#dc2626'];
+  const mesSet=new Set();D.forEach(r=>{if(r.mes)mesSet.add(r.mes);});
+  const mesL=[...mesSet].sort((a,b)=>MOS_ORD_IDX(a)-MOS_ORD_IDX(b));
+  const datasets=polosReal.map((polo,pi)=>({
+    label:polo,
+    data:mesL.map(mes=>Math.round(D.filter(r=>{
+      const munKey=nMun(r.mun);
+      const rPolo=r.polo||(munKey&&MUN[munKey]?MUN[munKey].polo:'')||'';
+      return r.mes===mes&&rPolo===polo&&(r.vt>0||r.vos>0);
+    }).reduce((s,r)=>s+(r.vt||r.vos||0),0))),
+    backgroundColor:poloPalette[pi%poloPalette.length],borderRadius:0,barPercentage:.75,categoryPercentage:.85
+  }));
+  // Legenda dinâmica
+  const legEl=document.getElementById('lpolo');
+  if(legEl)legEl.innerHTML=polosReal.map((p,i)=>`<span><span class="lsq" style="background:${poloPalette[i%poloPalette.length]}"></span>${p}</span>`).join('');
+  const altPolo=Math.max(280,mesL.length*40);document.getElementById('cpolo-wrap').style.height=altPolo+'px';
   const ctx=document.getElementById('cpolo').getContext('2d');if(CHS['cpolo'])CHS['cpolo'].destroy();
   CHS['cpolo']=new Chart(ctx,{type:'bar',data:{labels:mesL,datasets},options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${brl(c.raw)}`}}},scales:{x:{stacked:true,ticks:{color:'rgba(158,158,167,0.8)',font:{size:9},callback:v=>fmtK(v)},grid:{color:'rgba(255,255,255,.05)'}},y:{stacked:true,ticks:{color:'rgba(158,158,167,0.8)',font:{size:9,family:"'Inter',sans-serif"}},grid:{display:false}}}}});
 }
@@ -3799,19 +3819,36 @@ async function selecionarOsAgenda(r){
     const pf=mes2pasta(r.mesDir||r.mes),np=nomePasta(r.item,r.atv,r.osp);
     console.log(`[Agenda Tel] Buscando: ${pf} / ${np}`);
     
+    // Fallback: se não tem mês, busca a pasta da OS diretamente em todo o Drive pai
     if(!pf){
-      console.warn('[Agenda Tel] Pasta mês inválida');
-      inpT.value='';
+      const fDirect=await gapi.client.drive.files.list({
+        q:`name contains '${r.item}-' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+        fields:'files(id,name)',pageSize:3
+      });
+      const osDir=fDirect.result.files&&fDirect.result.files[0];
+      if(!osDir){inpT.value='';window.S_CONTATOS[r.item]={tel:null};return;}
+      const txDirect=await gapi.client.drive.files.list({
+        q:`'${osDir.id}' in parents and name contains '.txt' and trashed=false`,
+        fields:'files(id,name)',pageSize:1
+      });
+      if(!txDirect.result.files||!txDirect.result.files.length){inpT.value='';window.S_CONTATOS[r.item]={tel:null};return;}
+      const respD=await fetch(`https://www.googleapis.com/drive/v3/files/${txDirect.result.files[0].id}?alt=media`,{headers:{Authorization:`Bearer ${TOKEN}`}});
+      if(!respD.ok){inpT.value='';return;}
+      const txtD=await respD.text();
+      const cD=parseTxt(txtD,r);
+      window.S_CONTATOS[r.item]=cD;
+      inpT.value=(cD.tel||'').replace(/\D/g,'');
+      updateAgendaPreview();
       return;
     }
-    
+
     // 1. Busca pasta do mês
     const r1=await gapi.client.drive.files.list({
       q:`name='${pf}' and '${CFG.DID}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
       fields:'files(id,name)',
       pageSize:1
     });
-    
+
     if(!r1.result.files||!r1.result.files.length){
       console.warn(`[Agenda Tel] Pasta mês não encontrada: ${pf}`);
       inpT.value='';
