@@ -2618,17 +2618,64 @@ async function gerarComprovante(){
 function parseTxt(txt, r){
   let nome = null;
   let tel = null;
-  
-  // Captura nome na mesma linha OU na linha seguinte ao rótulo
-  const matchNome = txt.match(/Nome\s*do\s*contato\s*\.?\s*:?\s*:?\s*\r?\n?\s*([A-Za-zÀ-ÿ][^\n\r]+)/i);
-  if(matchNome) {
-    nome = matchNome[1].replace(/['"]/g, '').trim();
-  } else {
-    // Fallback genérico caso mudem
-    const mgen = txt.match(/(?:Cliente\s*\.?:|Respons[áa]vel[\s.:-]|Nome[\s.:-]+)([A-Za-zÀ-ÿ][^\n\r]+)/i);
-    if(mgen) nome = mgen[1].replace(/['"]/g, '').trim();
+
+  // Abordagem linha-a-linha — muito mais robusta para variações de formato da CAIXA
+  const lines = txt.split(/\r?\n/);
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    // ── NOME DO CONTATO ──────────────────────────────────────────
+    if (!nome && /Nome\s*do\s*contato/i.test(line)) {
+      // Tenta extrair da mesma linha (após separador '.:', ':', etc.)
+      const sameLineMatch = line.match(/Nome\s*do\s*contato[^:]*:?\s*\.?\s*:?\s*([A-Za-zÀ-ÿ][^\r\n]+)/i);
+      if (sameLineMatch && sameLineMatch[1].trim().length > 1) {
+        nome = sameLineMatch[1].replace(/['."]/g,'').trim();
+      } else if (i + 1 < lines.length) {
+        // Tenta a linha seguinte
+        const next = lines[i + 1].trim();
+        if (next && /^[A-Za-zÀ-ÿ]/.test(next)) {
+          nome = next.replace(/['."]/g,'').trim();
+        }
+      }
+    }
+
+    // ── TELEFONE DO CONTATO ───────────────────────────────────────
+    if (!tel && /Telefone\s*(?:do\s*)?contato/i.test(line)) {
+      // Tenta extrair da mesma linha (após ':', '.:' etc.)
+      const sameLineMatch = line.match(/Telefone\s*(?:do\s*)?contato[^:]*:?\s*\.?\s*:?\s*([\d(][\d()\s\-+]{5,})/i);
+      if (sameLineMatch && sameLineMatch[1].replace(/\D/g,'').length >= 8) {
+        tel = sameLineMatch[1].trim();
+      } else if (i + 1 < lines.length) {
+        // Tenta a linha seguinte — captura qualquer coisa que comece com dígito ou '('
+        const next = lines[i + 1].trim();
+        if (next && /^[\d(]/.test(next) && next.replace(/\D/g,'').length >= 8) {
+          tel = next;
+        } else if (i + 2 < lines.length) {
+          // Tenta duas linhas abaixo (ex: linha em branco entre rótulo e valor)
+          const next2 = lines[i + 2].trim();
+          if (next2 && /^[\d(]/.test(next2) && next2.replace(/\D/g,'').length >= 8) {
+            tel = next2;
+          }
+        }
+      }
+    }
+
+    if (nome && tel) break; // Já encontrou tudo, para de percorrer
   }
-  
+
+  // Fallbacks genéricos caso os rótulos exatos não sejam encontrados
+  if (!nome) {
+    const mgen = txt.match(/(?:Cliente\s*\.?:|Respons[áa]vel[\s.:-])([A-Za-zÀ-ÿ][^\n\r]+)/i);
+    if (mgen) nome = mgen[1].replace(/['."]/g,'').trim();
+  }
+  if (!tel) {
+    // Fallback: 'Celular' (evita pegar telefone da empresa)
+    const mCel = txt.match(/Celular[\s.:-]+([^\n\r]+)/i);
+    if (mCel) tel = mCel[1].trim();
+  }
+
+  // Normaliza nome para Title Case
   if (nome) {
     const lowers = ['da', 'de', 'di', 'do', 'du', 'das', 'dos', 'e'];
     nome = nome.toLowerCase().split(/[ \t]+/).map((word, i) => {
@@ -2636,21 +2683,6 @@ function parseTxt(txt, r){
       if (lowers.includes(word) && i !== 0) return word;
       return word.charAt(0).toUpperCase() + word.slice(1);
     }).join(' ');
-  }
-
-  // Tenta capturar telefone na mesma linha OU na linha seguinte ao rótulo
-  const matchTel = txt.match(/Telefone\s*(?:do\s*)?contato\s*[.:]?\s*:?\s*\r?\n?\s*([\d()\s\-+]+)/i);
-  if(matchTel) {
-    tel = matchTel[1].trim();
-  } else {
-    // Fallback: qualquer número após "Telefone" seguido de separador (mesma linha)
-    const mTelLinha = txt.match(/Telefone[^:\n]*:\s*([^\n\r]{5,})/i);
-    if(mTelLinha) tel = mTelLinha[1].trim();
-  }
-  // Segundo fallback: busca por "Celular" (evita pegar telefone da empresa)
-  if(!tel) {
-    const mCel = txt.match(/Celular[\s.:-]+([^\n\r]+)/i);
-    if(mCel) tel = mCel[1].trim();
   }
 
   let cep = null;
@@ -2737,12 +2769,23 @@ async function lerArquivoDrive(fileId){
   return resp.text();
 }
 async function buscarArquivoTxtNaPasta(folderId){
-  const res=await gapi.client.drive.files.list({
-    q:`'${folderId}' in parents and (mimeType='text/plain' or name contains '.txt' or name contains '.TXT') and mimeType!='application/vnd.google-apps.folder' and trashed=false`,
+  // Query 1: por mimeType text/plain (mais confiável, independe do nome)
+  const r1=await gapi.client.drive.files.list({
+    q:`'${folderId}' in parents and mimeType='text/plain' and mimeType!='application/vnd.google-apps.folder' and trashed=false`,
     fields:'files(id,name,mimeType,webViewLink)',
     pageSize:10
   });
-  return res.result.files||[];
+  if(r1.result.files&&r1.result.files.length) return r1.result.files;
+  // Query 2: fallback por todos os arquivos na pasta e filtra por extensão .txt/.TXT no nome
+  const r2=await gapi.client.drive.files.list({
+    q:`'${folderId}' in parents and mimeType!='application/vnd.google-apps.folder' and trashed=false`,
+    fields:'files(id,name,mimeType,webViewLink)',
+    pageSize:30
+  });
+  const todos=r2.result.files||[];
+  // Filtra por extensão .txt (case-insensitive) no nome
+  const txts=todos.filter(f=>f.name&&f.name.toLowerCase().endsWith('.txt'));
+  return txts;
 }
 async function loadContatoTxt(folderId, ros){
   try{
