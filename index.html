@@ -1373,7 +1373,7 @@ function getMesAtual(){const now=new Date();const m=['jan','fev','mar','abr','ma
 function normalizaMes(m){if(!m)return'';const s=String(m).trim().replace('.','');if(/^\d{4}-\d{2}$/.test(s)){const[ano,mes]=s.split('-');const meses=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];const idx=parseInt(mes,10)-1;if(idx>=0&&idx<12)return meses[idx]+'-'+ano.slice(2);}if(/^[a-z]{3}-\d{4}$/i.test(s)){const[mes,ano]=s.split('-');return mes.toLowerCase()+'-'+ano.slice(2);}return s;}
 function converterMesParaSalvar(m){if(!m)return'';const s=String(m).trim();if(/^\d{4}-\d{2}$/.test(s)){const[ano,mes]=s.split('-');const meses=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];const idx=parseInt(mes,10)-1;if(idx>=0&&idx<12)return meses[idx]+'-'+ano.slice(2);}return s;}
 function normalizaDataEntrega(d){if(!d)return'';const s=String(d).trim();if(/^\d{4}-\d{2}-\d{2}$/.test(s)){const[ano,mes,dia]=s.split('-');return`${dia}/${mes}/${ano}`;}if(/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(s)){return s;}return s;}
-function parseRow(r,i){return{ri:i+2,item:P(r[0]),os:P(r[1]),osp:P(r[1]),aceita:B(r[2]),atv:P(r[3]),tv:P(r[4]),polo:P(r[5]),mun:P(r[6]),bairro:P(r[7]),tip:P(r[8]),end:P(r[9]),area:P(r[10]),mes:normalizaMes(P(r[12])),siopi:normalizaDataEntrega(P(r[13])),pept:B(r[14]),ent:normalizaDataEntrega(P(r[15])),vis:B(r[16]),lau:B(r[17]),fich:B(r[21]),vos:pBRL(r[20]),vd:pBRL(r[22]),vt:pBRL(r[23]),st:P(r[24]),va:pBRL(r[25]),rsm:P(r[26]),rev:B(r[27]),abr:P(r[28]),prz:P(r[29]),cep:P(r[30]),ord:P(r[0])};}
+function parseRow(r,i){return{ri:i+2,item:P(r[0]),os:P(r[1]),osp:P(r[1]),aceita:B(r[2]),atv:P(r[3]),tv:P(r[4]),polo:P(r[5]),mun:P(r[6]),bairro:P(r[7]),tip:P(r[8]),end:P(r[9]),area:P(r[10]),mesDir:normalizaMes(P(r[11])),mes:normalizaMes(P(r[12])),siopi:normalizaDataEntrega(P(r[13])),pept:B(r[14]),ent:normalizaDataEntrega(P(r[15])),vis:B(r[16]),lau:B(r[17]),fich:B(r[21]),vos:pBRL(r[20]),vd:pBRL(r[22]),vt:pBRL(r[23]),st:P(r[24]),va:pBRL(r[25]),rsm:P(r[26]),rev:B(r[27]),abr:P(r[28]),prz:P(r[29]),cep:P(r[30]),ord:P(r[0])};}
 function stCfg(r){if(r.rev)return{cls:'st-revisao',bg:'#9333ea',lbl:'Em revisão'};return STCFG[r.st]||{cls:'',bg:'#475569',lbl:r.st||'—'};}
 function badge(r){const c=stCfg(r);return`<span class="badge" style="background:${c.bg}">${c.lbl}</span>`;}
 function rsm2(r){const a=parseFloat((r.area||'').replace(/[^\d,]/g,'').replace(',','.'));if(!a||a<=0||!r.va||r.va<=0)return'—';return'R$ '+(r.va/a).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -1432,7 +1432,7 @@ function salvarConfig() {
   localStorage.setItem('DanthiCfg', JSON.stringify(CONFIG_USER));
   document.getElementById('modal-config').style.display = 'none';
   showToast('Configurações salvas!');
-  if(TAB === 'agenda' && AGENDA_SEL) updAgMsg();
+  if(TAB === 'agenda') updateAgendaPreview();
 }
 
 function prazoStatus(r){
@@ -1943,8 +1943,8 @@ function renderCharts(D){
   mkC('cmun',{type:'bar',data:{labels:mTop.map(e=>e[0]),datasets:[{data:mTop.map(e=>e[1]),backgroundColor:mTop.map((_,i)=>munPalette[i%munPalette.length]),borderRadius:3}]},options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.parsed.x} OS`}}},scales:{x:{ticks:{stepSize:1}},y:{ticks:{font:{size:9,family:"'Inter',sans-serif"}}}}}});
   // Faturamento por polo
   const polos=Object.keys(POLO_CORES),cores=Object.values(POLO_CORES);
-  const mesSet=new Set();D.forEach(r=>{if(r.mes&&r.vt>0)mesSet.add(r.mes);});const mesL=[...mesSet].sort((a,b)=>MOS_ORD_IDX(a)-MOS_ORD_IDX(b));
-  const datasets=polos.map((polo,pi)=>({label:polo,data:mesL.map(mes=>Math.round(D.filter(r=>{const munKey=nMun(r.mun);const rPolo=r.polo||(munKey&&MUN[munKey]?MUN[munKey].polo:'')||'';return r.mes===mes&&rPolo.toLowerCase()===polo.toLowerCase()&&r.vt>0;}).reduce((s,r)=>s+r.vt,0))),backgroundColor:cores[pi],borderRadius:0,barPercentage:.75,categoryPercentage:.85}));
+  const mesSet=new Set();D.forEach(r=>{if(r.mes)mesSet.add(r.mes);});const mesL=[...mesSet].sort((a,b)=>MOS_ORD_IDX(a)-MOS_ORD_IDX(b));
+  const datasets=polos.map((polo,pi)=>({label:polo,data:mesL.map(mes=>Math.round(D.filter(r=>{const munKey=nMun(r.mun);const rPolo=r.polo||(munKey&&MUN[munKey]?MUN[munKey].polo:'')||'';return r.mes===mes&&rPolo.toLowerCase()===polo.toLowerCase()&&(r.vt>0||r.vos>0);}).reduce((s,r)=>s+(r.vt||r.vos||0),0))),backgroundColor:cores[pi],borderRadius:0,barPercentage:.75,categoryPercentage:.85}));
   const altPolo=Math.max(280,mesL.length*30);document.getElementById('cpolo-wrap').style.height=altPolo+'px';
   const ctx=document.getElementById('cpolo').getContext('2d');if(CHS['cpolo'])CHS['cpolo'].destroy();
   CHS['cpolo']=new Chart(ctx,{type:'bar',data:{labels:mesL,datasets},options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${brl(c.raw)}`}}},scales:{x:{stacked:true,ticks:{color:'rgba(158,158,167,0.8)',font:{size:9},callback:v=>fmtK(v)},grid:{color:'rgba(255,255,255,.05)'}},y:{stacked:true,ticks:{color:'rgba(158,158,167,0.8)',font:{size:9,family:"'Inter',sans-serif"}},grid:{display:false}}}}});
@@ -2263,7 +2263,7 @@ async function enriquecerComSIOPI(){
 
 // Localiza a pasta "02 - Documentos" da OS atual
 async function acharPasta02Documentos(os){
-  const pf=mes2pasta(os.mes);
+  const pf=mes2pasta(os.mesDir||os.mes);
   if(!pf||!AUTH)return null;
   try{
     // Pasta do mês
@@ -2376,7 +2376,7 @@ async function excluirOS(){
   try{
     if(AUTH) {
       try {
-        const pf=mes2pasta(COS.mes),np=nomePasta(COS.item,COS.atv,COS.osp);
+        const pf=mes2pasta(COS.mesDir||COS.mes),np=nomePasta(COS.item,COS.atv,COS.osp);
         if(pf && np) {
           const r1=await gapi.client.drive.files.list({q:`name='${pf}' and '${CFG.DID}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,fields:'files(id)',pageSize:1});
           if(r1.result.files.length) {
@@ -2491,7 +2491,7 @@ async function gerarComprovante(){
     // 5. Encontrar pasta "04 - Produtos" no Drive
     showToast('📁 Localizando pasta...');
     const osFolderName=nomePasta(COS.item,COS.atv,COS.osp);
-    const mesFolder=mes2pasta(COS.mes);
+    const mesFolder=mes2pasta(COS.mesDir||COS.mes);
     
     // Buscar pasta do mês
     let mesFolderRes=await gapi.client.drive.files.list({
@@ -2648,8 +2648,8 @@ function nomePasta(item,atv,osp){return`${item}-${osp.replace(/\//g,'')}`;}
 async function loadDrive(r){
   const ld=document.getElementById('d-dload'),ct=document.getElementById('d-dcont'),wn=document.getElementById('d-dwarn'),pt=document.getElementById('d-dpath'),fl=document.getElementById('d-folders');
   ld.style.display='flex';ct.style.display='none';wn.style.display='none';
-  const pf=mes2pasta(r.mes),np=nomePasta(r.item,r.atv,r.osp);
-  if(!pf){warnD(ld,ct,pt,fl,wn,`Mês "${r.mes}" inválido.`,np,'?');return;}
+  const pf=mes2pasta(r.mesDir||r.mes),np=nomePasta(r.item,r.atv,r.osp);
+  if(!pf){warnD(ld,ct,pt,fl,wn,`Mês "${r.mesDir||r.mes}" inválido.`,np,'?');return;}
   if(!AUTH){warnD(ld,ct,pt,fl,wn,'Entre com Google para acessar os documentos.',np,pf);return;}
   try{
     const r1=await gapi.client.drive.files.list({q:`name='${pf}' and '${CFG.DID}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,fields:'files(id,name)',pageSize:5});
@@ -3796,7 +3796,7 @@ async function selecionarOsAgenda(r){
   }
   
   try {
-    const pf=mes2pasta(r.mes),np=nomePasta(r.item,r.atv,r.osp);
+    const pf=mes2pasta(r.mesDir||r.mes),np=nomePasta(r.item,r.atv,r.osp);
     console.log(`[Agenda Tel] Buscando: ${pf} / ${np}`);
     
     if(!pf){
@@ -3945,8 +3945,10 @@ function updateAgendaPreview(){
     .replace(/\{\{endereco\}\}/g, end)
     .replace(/\{\{data\}\}/g, dStr)
     .replace(/\{\{hora\}\}/g, hStr)
-    .replace(/\{\{resp\}\}/g, CONFIG_USER.resp);
-    
+    .replace(/\{\{resp\}\}/g, CONFIG_USER.resp)
+    .replace(/\{\{crea\}\}/g, CONFIG_USER.crea)
+    .replace(/\{\{emp\}\}/g, CONFIG_USER.emp);
+
   if(aviso) msg+='\n\nAlém disso, há algum procedimento específico para acesso ao local? (Por exemplo: abaixar vidros, ligar alerta, luz de salão, passar por barricadas etc.)\nAgradeço desde já pela atenção e colaboração.';
   
   prev.textContent=msg;
@@ -4023,7 +4025,7 @@ async function gerarComprovantePDF(){
     el.parentElement.style.display='none';
     
     showToast('Enviando para o Google Drive...');
-    const pf=mes2pasta(AGENDA_SEL.mes),np=nomePasta(AGENDA_SEL.item,AGENDA_SEL.atv,AGENDA_SEL.osp);
+    const pf=mes2pasta(AGENDA_SEL.mesDir||AGENDA_SEL.mes),np=nomePasta(AGENDA_SEL.item,AGENDA_SEL.atv,AGENDA_SEL.osp);
     let osFolderId = null;
     let driveUrl = null;
     
@@ -4116,7 +4118,7 @@ async function batchUpdateCeps() {
   for (let i = 0; i < missingCeps.length; i++) {
     const r = missingCeps[i];
     try {
-      const pf=mes2pasta(r.mes);
+      const pf=mes2pasta(r.mesDir||r.mes);
       if(!pf) continue;
       const r1=await gapi.client.drive.files.list({q:`name='${pf}' and '${CFG.DID}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,fields:'files(id)'});
       if(!r1.result.files || !r1.result.files.length) continue;
