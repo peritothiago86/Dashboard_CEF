@@ -963,7 +963,7 @@ body.light-mode .wpp-msg-body{background:#e5ddd5;color:#111;border:1px solid rgb
       <div class="df">
         <div class="dl">CEP</div>
         <div class="dv" id="d-cep"></div>
-        <input class="dv-input" id="e-cep" type="text" data-field="cep" readonly>
+        <input class="dv-input" id="e-cep" type="text" data-field="cep" data-col="L">
       </div>
       <div class="df">
         <div class="dl">Polo</div>
@@ -1391,7 +1391,7 @@ function normalizaMes(m){
 }
 function converterMesParaSalvar(m){if(!m)return'';const s=String(m).trim();if(/^\d{4}-\d{2}$/.test(s)){const[ano,mes]=s.split('-');const meses=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];const idx=parseInt(mes,10)-1;if(idx>=0&&idx<12)return meses[idx]+'-'+ano.slice(2);}return s;}
 function normalizaDataEntrega(d){if(!d)return'';const s=String(d).trim();if(/^\d{4}-\d{2}-\d{2}$/.test(s)){const[ano,mes,dia]=s.split('-');return`${dia}/${mes}/${ano}`;}if(/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(s)){return s;}return s;}
-function parseRow(r,i){return{ri:i+2,item:P(r[0]),os:P(r[1]),osp:P(r[1]),aceita:B(r[2]),atv:P(r[3]),tv:P(r[4]),polo:P(r[5]),mun:P(r[6]),bairro:P(r[7]),tip:P(r[8]),end:P(r[9]),area:P(r[10]),mesDir:normalizaMes(P(r[11])),mes:normalizaMes(P(r[12])),siopi:normalizaDataEntrega(P(r[13])),pept:B(r[14]),ent:normalizaDataEntrega(P(r[15])),vis:B(r[16]),lau:B(r[17]),fich:B(r[21]),vos:pBRL(r[20]),vd:pBRL(r[22]),vt:pBRL(r[23]),st:P(r[24]),va:pBRL(r[25]),rsm:P(r[26]),rev:B(r[27]),abr:P(r[28]),prz:P(r[29]),cep:P(r[30]),ord:P(r[0])};}
+function parseRow(r,i){return{ri:i+2,item:P(r[0]),os:P(r[1]),osp:P(r[1]),aceita:B(r[2]),atv:P(r[3]),tv:P(r[4]),polo:P(r[5]),mun:P(r[6]),bairro:P(r[7]),tip:P(r[8]),end:P(r[9]),area:P(r[10]),cep:P(r[11]),mes:normalizaMes(P(r[12])),siopi:normalizaDataEntrega(P(r[13])),pept:B(r[14]),ent:normalizaDataEntrega(P(r[15])),vis:B(r[16]),lau:B(r[17]),fich:B(r[21]),vos:pBRL(r[20]),vd:pBRL(r[22]),vt:pBRL(r[23]),st:P(r[24]),va:pBRL(r[25]),rsm:P(r[26]),rev:B(r[27]),abr:P(r[28]),prz:P(r[29]),ord:P(r[0])};}
 function stCfg(r){if(r.rev)return{cls:'st-revisao',bg:'#9333ea',lbl:'Em revisão'};return STCFG[r.st]||{cls:'',bg:'#475569',lbl:r.st||'—'};}
 function badge(r){const c=stCfg(r);return`<span class="badge" style="background:${c.bg}">${c.lbl}</span>`;}
 function rsm2(r){const a=parseFloat((r.area||'').replace(/[^\d,]/g,'').replace(',','.'));if(!a||a<=0||!r.va||r.va<=0)return'—';return'R$ '+(r.va/a).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -2303,7 +2303,7 @@ async function enriquecerComSIOPI(){
 
 // Localiza a pasta "02 - Documentos" da OS atual
 async function acharPasta02Documentos(os){
-  const pf=mes2pasta(os.mesDir||os.mes);
+  const pf=mes2pasta(os.mes);
   if(!pf||!AUTH)return null;
   try{
     // Pasta do mês
@@ -2416,7 +2416,7 @@ async function excluirOS(){
   try{
     if(AUTH) {
       try {
-        const pf=mes2pasta(COS.mesDir||COS.mes),np=nomePasta(COS.item,COS.atv,COS.osp);
+        const pf=mes2pasta(COS.mes),np=nomePasta(COS.item,COS.atv,COS.osp);
         if(pf && np) {
           const r1=await gapi.client.drive.files.list({q:`name='${pf}' and '${CFG.DID}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,fields:'files(id)',pageSize:1});
           if(r1.result.files.length) {
@@ -2531,7 +2531,7 @@ async function gerarComprovante(){
     // 5. Encontrar pasta "04 - Produtos" no Drive
     showToast('📁 Localizando pasta...');
     const osFolderName=nomePasta(COS.item,COS.atv,COS.osp);
-    const mesFolder=mes2pasta(COS.mesDir||COS.mes);
+    const mesFolder=mes2pasta(COS.mes);
     
     // Buscar pasta do mês
     let mesFolderRes=await gapi.client.drive.files.list({
@@ -2705,7 +2705,7 @@ function parseTxt(txt, r){
         // Usar then(onOk, onErr) ao invés de .then().catch() para evitar TypeError.
         gapi.client.sheets.spreadsheets.values.update({
           spreadsheetId: CFG.SID,
-          range: `${CFG.SHT}!AA${r.ri}`,
+          range: `${CFG.SHT}!L${r.ri}`,
           valueInputOption: 'USER_ENTERED',
           resource: { values: [[res.cep]] }
         }).then(()=>{}, e => console.warn('Erro ao auto-salvar CEP:', e));
@@ -2760,8 +2760,8 @@ async function acharPastaOS(mesFolderId, r){
 async function loadDrive(r){
   const ld=document.getElementById('d-dload'),ct=document.getElementById('d-dcont'),wn=document.getElementById('d-dwarn'),pt=document.getElementById('d-dpath'),fl=document.getElementById('d-folders');
   ld.style.display='flex';ct.style.display='none';wn.style.display='none';
-  const pf=mes2pasta(r.mesDir||r.mes),np=nomePasta(r.item,r.atv,r.osp);
-  if(!pf){warnD(ld,ct,pt,fl,wn,`Mês "${r.mesDir||r.mes}" inválido.`,np,'?');return;}
+  const pf=mes2pasta(r.mes),np=nomePasta(r.item,r.atv,r.osp);
+  if(!pf){warnD(ld,ct,pt,fl,wn,`Mês "${r.mes}" inválido.`,np,'?');return;}
   if(!AUTH){warnD(ld,ct,pt,fl,wn,'Entre com Google para acessar os documentos.',np,pf);return;}
   try{
     const r1=await gapi.client.drive.files.list({q:`name='${pf}' and '${CFG.DID}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,fields:'files(id,name)',pageSize:5});
@@ -3957,7 +3957,7 @@ async function selecionarOsAgenda(r){
   }
   
   try {
-    const pf=mes2pasta(r.mesDir||r.mes),np=nomePasta(r.item,r.atv,r.osp);
+    const pf=mes2pasta(r.mes),np=nomePasta(r.item,r.atv,r.osp);
     console.log(`[Agenda Tel] Buscando: ${pf} / ${np}`);
     
     if(!pf) return buscarTxtDireto(r.item,r,inpT);
@@ -4185,7 +4185,7 @@ async function gerarComprovantePDF(){
     el.parentElement.style.display='none';
     
     showToast('Enviando para o Google Drive...');
-    const pf=mes2pasta(AGENDA_SEL.mesDir||AGENDA_SEL.mes),np=nomePasta(AGENDA_SEL.item,AGENDA_SEL.atv,AGENDA_SEL.osp);
+    const pf=mes2pasta(AGENDA_SEL.mes),np=nomePasta(AGENDA_SEL.item,AGENDA_SEL.atv,AGENDA_SEL.osp);
     let osFolderId = null;
     let driveUrl = null;
     
@@ -4278,7 +4278,7 @@ async function batchUpdateCeps() {
   for (let i = 0; i < missingCeps.length; i++) {
     const r = missingCeps[i];
     try {
-      const pf=mes2pasta(r.mesDir||r.mes);
+      const pf=mes2pasta(r.mes);
       if(!pf) continue;
       const r1=await gapi.client.drive.files.list({q:`name='${pf}' and '${CFG.DID}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,fields:'files(id)'});
       if(!r1.result.files || !r1.result.files.length) continue;
@@ -4313,7 +4313,7 @@ async function batchUpdateCeps() {
         
         await gapi.client.sheets.spreadsheets.values.update({
           spreadsheetId: CFG.SID,
-          range: `${CFG.SHT}!AA${r.ri}`,
+          range: `${CFG.SHT}!L${r.ri}`,
           valueInputOption: 'USER_ENTERED',
           resource: { values: [[cepVal]] }
         });
