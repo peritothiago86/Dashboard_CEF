@@ -2115,7 +2115,11 @@ async function saveDrawerEdits(){
     showToast('✅ OS atualizada com sucesso!');
     await loadData();
     closeD();
-  }catch(e){showToast('Erro ao salvar: '+e.message);}
+  }catch(e){
+    console.error('saveDrawerEdits error:',e);
+    const msg=e?.result?.error?.message||e?.body||e?.message||e?.statusText||(typeof e==='string'?e:JSON.stringify(e));
+    showToast('Erro ao salvar: '+msg);
+  }
 }
 
 function copyAddress(){
