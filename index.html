@@ -2088,9 +2088,9 @@ async function saveDrawerEdits(){
     if(baseMun){
       // Mun: salva com ou sem sufixo de deslocamento especial
       const finalMunNm=isEsp?`${baseMun} (Deslocamento especial)`:baseMun;
-      const munUpdIdx=updates.findIndex(u=>u.range.endsWith(`!F${COS.ri}`));
+      const munUpdIdx=updates.findIndex(u=>u.range.endsWith(`!G${COS.ri}`));
       if(munUpdIdx>=0)updates[munUpdIdx].values=[[finalMunNm]];
-      else updates.push({range:`${CFG.SHT}!F${COS.ri}`,values:[[finalMunNm]]});
+      else updates.push({range:`${CFG.SHT}!G${COS.ri}`,values:[[finalMunNm]]});
       // vOS determinado pela atividade (ATV); fallback para valor já salvo se atividade desconhecida
       let vOS=COS.vos||0;
       const cfgAtv=ATV[atvNow];
@@ -2105,9 +2105,9 @@ async function saveDrawerEdits(){
         }
       }
       const fmt=v=>`R$ ${v.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
-      updates.push({range:`${CFG.SHT}!R${COS.ri}`,values:[[fmt(vOS)]]});
-      updates.push({range:`${CFG.SHT}!S${COS.ri}`,values:[[fmt(vDesloc)]]});
-      updates.push({range:`${CFG.SHT}!T${COS.ri}`,values:[[fmt(vOS+vDesloc)]]});
+      updates.push({range:`${CFG.SHT}!U${COS.ri}`,values:[[fmt(vOS)]]});
+      updates.push({range:`${CFG.SHT}!W${COS.ri}`,values:[[fmt(vDesloc)]]});
+      updates.push({range:`${CFG.SHT}!X${COS.ri}`,values:[[fmt(vOS+vDesloc)]]});
     }
   }
   try{
