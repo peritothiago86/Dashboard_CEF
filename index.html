@@ -3682,8 +3682,40 @@ async function salvar(){
   const osp=os.replace(/\//g,'');
   const mes=converterMesParaSalvar(mesInput);
   const dataEntrega=document.getElementById('nent').value;
-  // Ordem das colunas: Item, OS, OS Aceita, Atividade, Tipo vistoria, Município, Bairro, Tipologia, Endereço, Área, Mês, ART Mês, Entrada SIOPI, PEPT, Entrega, Vistoria, Laudo, Valor OS, Valor Desloc, Valor Total, Status OS, Valor avaliado, R$/m², Revisão, Abertura, Prazo
-  const row=[novoItem,os,'TRUE',atv,document.getElementById('ntv').value,munNm,bairro,document.getElementById('ntip').value,end,area,mes,'',siopi,'FALSE',dataEntrega,'FALSE','FALSE',`R$ ${vo.toFixed(2).replace('.',',')}`,`R$ ${vd.toFixed(2).replace('.',',')}`,`R$ ${(vo+vd).toFixed(2).replace('.',',')}`, 'Sem vistoria - não agendado','','','FALSE','',''];
+  // Ordem das colunas (layout atualizado): A=Item, B=OS, C=OS Aceita, D=Atividade, E=Tipo Vistoria, F=Polo, G=Município, H=Bairro, I=Tipologia, J=Endereço, K=Área, L=CEP, M=Mês, N=Entrada SIOPI, O=PEPT, P=Entrega, Q=Vistoria, R=Laudo, S=(reservado), T=(reservado), U=Valor OS, V=Ficha, W=Valor Desloc, X=Valor Total, Y=Status OS, Z=Valor avaliado, AA=R$/m², AB=Revisão, AC=Abertura, AD=Prazo
+  const polo=document.getElementById('npolo').value||'';
+  const row=[
+    novoItem,                                                  // A — Item
+    os,                                                        // B — OS
+    'TRUE',                                                    // C — OS Aceita
+    atv,                                                       // D — Atividade
+    document.getElementById('ntv').value,                      // E — Tipo Vistoria
+    polo,                                                      // F — Polo
+    munNm,                                                     // G — Município
+    bairro,                                                    // H — Bairro
+    document.getElementById('ntip').value,                     // I — Tipologia
+    end,                                                       // J — Endereço
+    area,                                                      // K — Área
+    cep,                                                       // L — CEP
+    mes,                                                       // M — Mês
+    siopi,                                                     // N — Entrada SIOPI
+    'FALSE',                                                   // O — PEPT
+    dataEntrega,                                               // P — Entrega
+    'FALSE',                                                   // Q — Vistoria
+    'FALSE',                                                   // R — Laudo
+    '',                                                        // S — (reservado)
+    '',                                                        // T — (reservado)
+    `R$ ${vo.toFixed(2).replace('.',',')}`,                    // U — Valor OS
+    'FALSE',                                                   // V — Ficha
+    `R$ ${vd.toFixed(2).replace('.',',')}`,                    // W — Valor Desloc
+    `R$ ${(vo+vd).toFixed(2).replace('.',',')}`,               // X — Valor Total
+    'Sem vistoria - não agendado',                             // Y — Status OS
+    '',                                                        // Z — Valor avaliado
+    '',                                                        // AA — R$/m²
+    'FALSE',                                                   // AB — Revisão
+    '',                                                        // AC — Abertura
+    ''                                                         // AD — Prazo
+  ];
   try{
     console.log('=== DEBUG SALVAR OS ===');
     console.log('Spreadsheet ID:', CFG.SID);
